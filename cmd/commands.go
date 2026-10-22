@@ -1,4 +1,4 @@
-package command
+package cmd
 
 import (
 	"bufio"
@@ -29,16 +29,16 @@ func HandleRequest(h *Handler, reader *bufio.Reader) (string, error) {
 		return res, err
 	}
 
+	if env.Size == 0 {
+		return "", NCP
+	}
+
 	res = commandRouter(env, h)
 	return res, nil
 
 }
 
 func commandRouter(command resp.Envelope, h *Handler) string {
-
-	if command.Size == 0 {
-		return HandleErr("ERR no command given", resp.SimpleError)
-	}
 
 	op := command.Array[0]
 
@@ -68,12 +68,7 @@ func commandRouter(command resp.Envelope, h *Handler) string {
 	case "LLEN":
 		return llen(command, h)
 	default:
-		var args string
-		for i := range command.Size {
-			args = args + "'" + command.Array[i].String + "' "
-		}
-		errStr := "ERR unknown command '" + op.String + "', with args beginning with: " + args
-		return HandleErr(errStr, resp.SimpleError)
+		return HandleErr(UNC, command)
 	}
 
 }
@@ -87,23 +82,23 @@ func ping() string {
 	return resp.FormatMapper(env)
 }
 
-func echo(req resp.Envelope) string {
-	if req.Size != 2 {
-		return HandleErr("ERR wrong number of arguments for 'echo' command", resp.SimpleError)
+func echo(env resp.Envelope) string {
+	if env.Size != 2 {
+		return HandleErr(WNA, env)
 	}
 
-	env := resp.Envelope{
+	resEnv := resp.Envelope{
 		OpCode: resp.BulkString,
-		Size:   req.Array[1].Size,
-		String: req.Array[1].String,
+		Size:   env.Array[1].Size,
+		String: env.Array[1].String,
 	}
 
-	return resp.FormatMapper(env)
+	return resp.FormatMapper(resEnv)
 }
 
 func set(env resp.Envelope, h *Handler) string {
 	if env.Size < 3 || env.Size > 5 {
-		return HandleErr("ERR wrong number of arguments for 'set' command", resp.SimpleError)
+		return HandleErr(WNA, env)
 	}
 
 	key := env.Array[1].String
@@ -118,9 +113,10 @@ func set(env resp.Envelope, h *Handler) string {
 		case "EX", "PX":
 			interval, err := strconv.Atoi(env.Array[4].String)
 			if err != nil {
-				return HandleErr("ERR error in converting seconds to integer", resp.SimpleError)
+				return HandleErr(NAI, env)
 			}
 			expiry = time.Now()
+
 			if option == "EX" {
 				expiry = expiry.Add(time.Duration(interval) * time.Second)
 			} else {
@@ -128,7 +124,7 @@ func set(env resp.Envelope, h *Handler) string {
 			}
 		}
 	default:
-		return HandleErr("ERR wrong number of arguments for 'set' command", resp.SimpleError)
+		return HandleErr(WNA, env)
 	}
 
 	h.store.SET(key, value, expiry)
@@ -144,13 +140,13 @@ func set(env resp.Envelope, h *Handler) string {
 
 func get(env resp.Envelope, h *Handler) string {
 	if env.Size != 2 {
-		return HandleErr("ERR wrong number of arguments for 'get' command", resp.SimpleError)
+		return HandleErr(WNA, env)
 	}
 	key := env.Array[1].String
 	value, ok := h.store.GET(key)
 
 	if !ok {
-		return HandleNIL()
+		return NIL()
 	}
 
 	resEnv := resp.Envelope{
@@ -158,39 +154,39 @@ func get(env resp.Envelope, h *Handler) string {
 		Size:   len(value),
 		String: value,
 	}
-	return resp.FormatMapper(resEnv)
 
+	return resp.FormatMapper(resEnv)
 }
 
 func incr(env resp.Envelope, h *Handler) string {
 	if env.Size != 2 {
-		return HandleErr("ERR wrong number of arguments for 'incr' command", resp.SimpleError)
+		return HandleErr(WNA, env)
 	}
 
 	key := env.Array[1].String
 	value, ok := h.store.INCR(key)
-	if ok {
-		resEnv := resp.Envelope{
-			OpCode:  resp.Integer,
-			Integer: value,
-		}
-
-		return resp.FormatMapper(resEnv)
+	if !ok {
+		return HandleErr(NAI, env)
 	}
 
-	return HandleErr("ERR value is not an integer or out of range", resp.SimpleError)
+	resEnv := resp.Envelope{
+		OpCode:  resp.Integer,
+		Integer: value,
+	}
+
+	return resp.FormatMapper(resEnv)
 
 }
 
 func decr(env resp.Envelope, h *Handler) string {
 	if env.Size != 2 {
-		return HandleErr("ERR wrong number of arguments for 'incr' command", resp.SimpleError)
+		return HandleErr(WNA, env)
 	}
 
 	key := env.Array[1].String
 	value, ok := h.store.DECR(key)
 	if !ok {
-		return HandleErr("ERR value is not an integer or out of range", resp.SimpleError)
+		return HandleErr(NAI, env)
 	}
 
 	resEnv := resp.Envelope{

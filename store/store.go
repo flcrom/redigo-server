@@ -54,6 +54,8 @@ func (s *Store) get(key string) (*Value, bool) {
 	return value, ok
 }
 
+// ------ SET GET -------
+
 func (s *Store) SET(key string, value string, expiry time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,6 +73,8 @@ func (s *Store) GET(key string) (string, bool) {
 	}
 	return valObj.str, ok
 }
+
+// ------ INCR DECR ------
 
 func (s *Store) INCR(key string) (int, bool) {
 	s.mu.Lock()
@@ -108,6 +112,128 @@ func (s *Store) DECR(key string) (int, bool) {
 
 	valObj.str = strconv.Itoa(newVal)
 	return newVal, ok
+}
+
+// ------ Linked list --------
+
+func (s *Store) LPUSH(key string, values []string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	valObj := s.db[key]
+	for _, value := range values {
+		// no value object present
+		if valObj == nil {
+			valObj = &Value{
+				kind: List,
+				list: NewLinkedList(value),
+			}
+			s.db[key] = valObj
+		} else if valObj.kind == List {
+			// value is List
+			valObj.list.lpush(value)
+		} else {
+			// value is not list
+			return 0, ErrWrongType
+		}
+	}
+
+	return valObj.list.size, nil
+}
+
+func (s *Store) RPUSH(key string, values []string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	valObj := s.db[key]
+	for _, value := range values {
+		if valObj == nil {
+			valObj = &Value{
+				kind: List,
+				list: NewLinkedList(value),
+			}
+			s.db[key] = valObj
+		} else if valObj.kind == List {
+			valObj.list.rpush(value)
+		} else {
+			return 0, ErrWrongType
+		}
+	}
+
+	return valObj.list.size, nil
+}
+
+func (s *Store) LPOP(key string, count int) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	valObj := s.db[key]
+	if valObj == nil {
+		return []string{}, nil
+	}
+	if valObj.kind != List {
+		return []string{}, ErrWrongType
+	}
+	if valObj.list.size == 0 {
+		return []string{}, nil
+	}
+
+	ret := valObj.list.lpop(count)
+	return ret, nil
+}
+
+func (s *Store) RPOP(key string, count int) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	valObj := s.db[key]
+	if valObj == nil {
+		return []string{}, nil
+	}
+	if valObj.kind != List {
+		return []string{}, ErrWrongType
+	}
+	if valObj.list.size == 0 {
+		return []string{}, nil
+	}
+
+	ret := valObj.list.rpop(count)
+	return ret, nil
+}
+
+func (s *Store) LRANGE(key string, start int, stop int) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	valObj := s.db[key]
+	if valObj == nil {
+		return []string{}, nil
+	}
+	if valObj.kind != List {
+		return []string{}, ErrWrongType
+	}
+	if valObj.list.size == 0 {
+		return []string{}, nil
+	}
+
+	values := valObj.list.lrange(start, stop)
+	return values, nil
+}
+
+func (s *Store) LLEN(key string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	valObj := s.db[key]
+
+	if valObj == nil {
+		return 0, nil
+	}
+	if valObj.kind != List {
+		return 0, ErrWrongType
+	}
+
+	return valObj.list.llen(), nil
 }
 
 // Problem : redis increment will retrieve the value using the get command,

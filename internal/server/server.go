@@ -5,20 +5,24 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"redigo/command"
+	"redigo/cmd"
 )
 
-func HandleIO(conn net.Conn, handler *command.Handler) {
+func HandleIO(conn net.Conn, handler *cmd.Handler) {
 	reader := bufio.NewReader(conn)
 	defer conn.Close()
 
 	for {
-		res, err := command.HandleRequest(handler, reader)
+		res, err := cmd.HandleRequest(handler, reader)
 		if err != nil {
 			// system error occurred
 			// "stop the connection" kinda errors occured
 			if err == io.EOF {
 				fmt.Printf("User disconnected EOF error: %s \n", err)
+				return
+			}
+
+			if err == cmd.NCP {
 				return
 			}
 

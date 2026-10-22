@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-
-	"redigo/command"
+	"redigo/cmd"
 	"redigo/internal/server"
 	"redigo/store"
 )
@@ -27,7 +26,7 @@ func main() {
 func consumeListener(listener net.Listener) {
 	//initialize store and the handler
 	store := store.NewStore()
-	handler := command.NewHandler(store)
+	handler := cmd.NewHandler(store)
 
 	for {
 		conn, err := listener.Accept()
